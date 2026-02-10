@@ -319,18 +319,14 @@ if uploaded_file is not None:
         
         st.success(f"✅ Arquivo carregado com sucesso! Total de {len(df)} tarefas.")
         
-        # Gera os gráficos automaticamente
-        with st.spinner("📊 Gerando gráficos..."):
-            graficos = gerar_todos_graficos(df)
-            if graficos:
-                st.success(f"✅ {len(graficos)} gráficos gerados e salvos na pasta 'graficos/'!")
-                
-                # Mostra os gráficos gerados
-                st.markdown("### 📈 Gráficos Gerados")
-                cols = st.columns(2)
-                for idx, (titulo, caminho) in enumerate(graficos):
-                    with cols[idx % 2]:
-                        st.image(caminho, caption=titulo, use_container_width=True)
+        # Gera os gráficos principais automaticamente (apenas uma vez por upload)
+        if 'ultimo_upload' not in st.session_state or st.session_state.ultimo_upload != uploaded_file.name:
+            with st.spinner("📊 Gerando gráficos principais..."):
+                graficos = gerar_todos_graficos(df)
+                if graficos:
+                    st.session_state.graficos_principais = graficos
+                    st.session_state.ultimo_upload = uploaded_file.name
+                    st.success(f"✅ {len(graficos)} gráficos gerados e salvos na pasta 'graficos/'!")
         
         # Sidebar com filtros
         st.sidebar.header("🔍 Filtros")
@@ -518,12 +514,24 @@ if uploaded_file is not None:
             mime="text/csv"
         )
 
-
-          # ====================== EVOLUÇÃO MENSAL - USANDO OS INDICADORES CORRETOS ======================
+        # ====================== GRÁFICOS PRINCIPAIS - EXIBIÇÃO AUTOMÁTICA ======================
         st.markdown("---")
-        st.subheader("Evolução Mensal - 5 Gráficos Individuais")
+        st.markdown("## 📊 Gráficos Principais")
+        
+        # Mostra os gráficos se já foram gerados
+        if 'graficos_principais' in st.session_state:
+            st.markdown("### 📈 Gráficos Gerados")
+            cols = st.columns(2)
+            for idx, (titulo, caminho) in enumerate(st.session_state.graficos_principais):
+                with cols[idx % 2]:
+                    st.image(caminho, caption=titulo, use_container_width=True)
+
+        # ====================== EVOLUÇÃO MENSAL - USANDO OS INDICADORES CORRETOS ======================
+        st.markdown("---")
+        st.subheader("📈 Evolução Mensal - 5 Gráficos Individuais")
 
         from dateutil.relativedelta import relativedelta
+        from datetime import datetime, timedelta
 
         # --- Meses ---
         hoje = datetime.now()
@@ -533,132 +541,263 @@ if uploaded_file is not None:
 
         def nome_mes(dt):
             return dt.strftime("%B / %Y")\
-                     .replace("January","Janeiro").replace("February","Fevereiro").replace("March","Março")\
-                     .replace("April","Abril").replace("May","Maio").replace("June","Junho")\
-                     .replace("July","Julho").replace("August","Agosto").replace("September","Setembro")\
-                     .replace("October","Outubro").replace("November","Novembro").replace("December","Dezembro")
+                .replace("January","Janeiro").replace("February","Fevereiro").replace("March","Março")\
+                .replace("April","Abril").replace("May","Maio").replace("June","Junho")\
+                .replace("July","Julho").replace("August","Agosto").replace("September","Setembro")\
+                .replace("October","Outubro").replace("November","Novembro").replace("December","Dezembro")
 
         mes_retrasado = nome_mes(mes_retrasado_dt)
         mes_passado   = nome_mes(mes_passado_dt)
         mes_atual     = nome_mes(mes_atual_dt)
 
-        # --- Extrai valores corretos diretamente dos indicadores (sem filtros!) ---
+        # --- Valores atuais ---
         total_atual = indicadores['total_atividades']
 
-        # Centro de Custo
-        cc_atual_nome = indicadores.get('centro_custo', 'N/A').split(':')[0].strip() if ':' in indicadores.get('centro_custo', '') else "N/D"
-        cc_atual_perc = float(indicadores.get('centro_custo', '0: 0%').split(':')[1].replace('%', '').strip())
+        cc_atual_nome = indicadores.get('centro_custo', 'N/D').split(':')[0].strip()
+        cc_atual_perc = float(indicadores.get('centro_custo', '0: 0%').split(':')[1].replace('%',''))
 
-        # Produto
-        prod_atual_nome = indicadores.get('produto', 'N/A').split(':')[0].strip() if ':' in indicadores.get('produto', '') else "N/D"
-        prod_atual_perc = float(indicadores.get('produto', '0: 0%').split(':')[1].replace('%', '').strip())
+        prod_atual_nome = indicadores.get('produto', 'N/D').split(':')[0].strip()
+        prod_atual_perc = float(indicadores.get('produto', '0: 0%').split(':')[1].replace('%',''))
 
-        # Planejadas
         plan_str = indicadores.get('planejadas', 'Planejadas: 0 (0.00%)')
         plan_qtd = int(plan_str.split(':')[1].split('(')[0].strip())
+        # Extrair percentual do indicador
+        plan_perc_atual = float(plan_str.split('(')[1].replace('%)', '').strip())
 
-        # Tipo
-        tipo_atual_nome = indicadores.get('tipo', 'N/A').split(':')[0].strip() if ':' in indicadores.get('tipo', '') else "N/D"
-        tipo_atual_perc = float(indicadores.get('tipo', '0: 0%').split(':')[1].replace('%', '').strip())
+        tipo_atual_nome = indicadores.get('tipo', 'N/D').split(':')[0].strip()
+        tipo_atual_perc = float(indicadores.get('tipo', '0: 0%').split(':')[1].replace('%',''))
 
-        # --- Interface ---
-        col1, col2, col3, col4, col5 = st.columns(5)
+        # =====================================================================
+        # FORMULÁRIO
+        # =====================================================================
+        with st.form("form_evolucao_graficos"):
 
-        with col1:
-            st.markdown("**Total de Tarefas**")
-            tot_ret  = st.number_input(mes_retrasado, value=0, step=1, key="tot_r")
-            tot_pass = st.number_input(mes_passado,   value=0, step=1, key="tot_p")
-            st.markdown(f"**{mes_atual}**")
-            st.success(f"**{total_atual}** tarefas")
+            col1, col2, col3, col4, col5 = st.columns(5)
 
-        with col2:
-            st.markdown("**Centro de Custo**")
-            cc_ret   = st.selectbox(mes_retrasado, ["Nenhum"] + sorted(df['Centro de Custo (drop down)'].dropna().unique().tolist()), key="cc_ret")
-            cc_pass  = st.selectbox(mes_passado,   ["Nenhum"] + sorted(df['Centro de Custo (drop down)'].dropna().unique().tolist()), key="cc_pass")
-            cc_val_ret  = st.number_input(f"% {mes_retrasado}", value=0.0, step=0.1, format="%.1f", key="ccv_ret")
-            cc_val_pass = st.number_input(f"% {mes_passado}",   value=0.0, step=0.1, format="%.1f", key="ccv_pass")
-            st.markdown(f"**{mes_atual}**")
-            st.success(f"**{cc_atual_perc:.1f}%** ({cc_atual_nome})")
+            with col1:
+                st.markdown("**Total de Tarefas**")
+                st.markdown(f"*{mes_retrasado}*")
+                tot_ret = st.number_input("Quantidade", value=0, step=1, key="tot_ret")
+                
+                st.markdown(f"*{mes_passado}*")
+                tot_pass = st.number_input("Quantidade", value=0, step=1, key="tot_pass")
+                
+                st.markdown(f"**{mes_atual}**")
+                st.success(f"**{total_atual}** tarefas")
 
-        with col3:
-            st.markdown("**Produto**")
-            prod_ret   = st.selectbox(mes_retrasado, ["Nenhum"] + sorted(df['Produto (drop down)'].dropna().unique().tolist()), key="prod_ret")
-            prod_pass  = st.selectbox(mes_passado,   ["Nenhum"] + sorted(df['Produto (drop down)'].dropna().unique().tolist()), key="prod_pass")
-            prod_val_ret  = st.number_input(f"% {mes_retrasado}", value=0.0, step=0.1, format="%.1f", key="prodv_ret")
-            prod_val_pass = st.number_input(f"% {mes_passado}",   value=0.0, step=0.1, format="%.1f", key="prodv_pass")
-            st.markdown(f"**{mes_atual}**")
-            st.success(f"**{prod_atual_perc:.1f}%** ({prod_atual_nome})")
+            with col2:
+                st.markdown("**Centro de Custo**")
+                st.markdown(f"*{mes_retrasado}*")
+                cc_ret = st.selectbox("Categoria", ["Nenhum"] + sorted(df['Centro de Custo (drop down)'].dropna().unique()), key="cc_ret", label_visibility="collapsed")
+                cc_val_ret = st.number_input("Percentual (%)", value=0.0, step=0.1, format="%.1f", key="cc_val_ret")
+                
+                st.markdown(f"*{mes_passado}*")
+                cc_pass = st.selectbox("Categoria", ["Nenhum"] + sorted(df['Centro de Custo (drop down)'].dropna().unique()), key="cc_pass", label_visibility="collapsed")
+                cc_val_pass = st.number_input("Percentual (%)", value=0.0, step=0.1, format="%.1f", key="cc_val_pass")
+                
+                st.markdown(f"**{mes_atual}**")
+                st.success(f"**{cc_atual_nome}**\n{cc_atual_perc:.1f}%")
 
-        with col4:
-            st.markdown("**Atividades Planejadas**")
-            plan_ret  = st.number_input(mes_retrasado + " (qtd)", value=0, step=1, key="plan_ret")
-            plan_pass = st.number_input(mes_passado   + " (qtd)", value=0, step=1, key="plan_pass")
-            st.markdown(f"**{mes_atual}**")
-            st.success(f"**{plan_qtd}** planejadas")
+            with col3:
+                st.markdown("**Produto**")
+                st.markdown(f"*{mes_retrasado}*")
+                prod_ret = st.selectbox("Categoria", ["Nenhum"] + sorted(df['Produto (drop down)'].dropna().unique()), key="prod_ret", label_visibility="collapsed")
+                prod_val_ret = st.number_input("Percentual (%)", value=0.0, step=0.1, format="%.1f", key="prod_val_ret")
+                
+                st.markdown(f"*{mes_passado}*")
+                prod_pass = st.selectbox("Categoria", ["Nenhum"] + sorted(df['Produto (drop down)'].dropna().unique()), key="prod_pass", label_visibility="collapsed")
+                prod_val_pass = st.number_input("Percentual (%)", value=0.0, step=0.1, format="%.1f", key="prod_val_pass")
+                
+                st.markdown(f"**{mes_atual}**")
+                st.success(f"**{prod_atual_nome}**\n{prod_atual_perc:.1f}%")
 
-        with col5:
-            st.markdown("**Tipo de Atividade**")
-            tipo_ret   = st.selectbox(mes_retrasado, ["Nenhum"] + sorted(df['Tipo (drop down)'].dropna().unique().tolist()), key="tipo_ret")
-            tipo_pass  = st.selectbox(mes_passado,   ["Nenhum"] + sorted(df['Tipo (drop down)'].dropna().unique().tolist()), key="tipo_pass")
-            tipo_val_ret  = st.number_input(f"% {mes_retrasado}", value=0.0, step=0.1, format="%.1f", key="tipov_ret")
-            tipo_val_pass = st.number_input(f"% {mes_passado}",   value=0.0, step=0.1, format="%.1f", key="tipov_pass")
-            st.markdown(f"**{mes_atual}**")
-            st.success(f"**{tipo_atual_perc:.1f}%** ({tipo_atual_nome})")
+            with col4:
+                st.markdown("**Tipo de Atividade**")
+                st.markdown(f"*{mes_retrasado}*")
+                tipo_ret = st.selectbox("Categoria", ["Nenhum"] + sorted(df['Tipo (drop down)'].dropna().unique()), key="tipo_ret", label_visibility="collapsed")
+                tipo_val_ret = st.number_input("Percentual (%)", value=0.0, step=0.1, format="%.1f", key="tipo_val_ret")
+                
+                st.markdown(f"*{mes_passado}*")
+                tipo_pass = st.selectbox("Categoria", ["Nenhum"] + sorted(df['Tipo (drop down)'].dropna().unique()), key="tipo_pass", label_visibility="collapsed")
+                tipo_val_pass = st.number_input("Percentual (%)", value=0.0, step=0.1, format="%.1f", key="tipo_val_pass")
+                
+                st.markdown(f"**{mes_atual}**")
+                st.success(f"**{tipo_atual_nome}**\n{tipo_atual_perc:.1f}%")
 
-        # --- Gerar Gráficos ---
-        if st.button("Gerar 5 Gráficos de Evolução", type="primary", use_container_width=True):
+            with col5:
+                st.markdown("**Atividades Planejadas**")
+                st.markdown(f"*{mes_retrasado}*")
+                plan_ret = st.number_input("Quantidade", value=0, step=1, key="plan_ret")
+                plan_perc_ret = st.number_input("Percentual (%)", value=0.0, step=0.1, format="%.1f", key="plan_perc_ret")
+                
+                st.markdown(f"*{mes_passado}*")
+                plan_pass = st.number_input("Quantidade", value=0, step=1, key="plan_pass")
+                plan_perc_pass = st.number_input("Percentual (%)", value=0.0, step=0.1, format="%.1f", key="plan_perc_pass")
+                
+                st.markdown(f"**{mes_atual}**")
+                st.success(f"**{plan_qtd}** planejadas\n({plan_perc_atual:.1f}%)")
 
-            meses_abrev = {'Janeiro':'Jan','Fevereiro':'Fev','Março':'Mar','Abril':'Abr','Maio':'Mai','Junho':'Jun',
-                           'Julho':'Jul','Agosto':'Ago','Setembro':'Set','Outubro':'Out','Novembro':'Nov','Dezembro':'Dez'}
+            # Botão submit fora das colunas, mas dentro do formulário
+            st.markdown("")  # Espaço
+            gerar = st.form_submit_button(
+                "🎨 Gerar 5 Gráficos de Evolução",
+                use_container_width=True
+            )
+
+        # =====================================================================
+        # GERAÇÃO DOS GRÁFICOS
+        # =====================================================================
+        if gerar:
+
+            meses_abrev = {
+                'Janeiro':'Jan','Fevereiro':'Fev','Março':'Mar','Abril':'Abr',
+                'Maio':'Mai','Junho':'Jun','Julho':'Jul','Agosto':'Ago',
+                'Setembro':'Set','Outubro':'Out','Novembro':'Nov','Dezembro':'Dez'
+            }
+
             def label(m):
-                mes = m.split(" / ")[0]
-                return meses_abrev.get(mes, mes[:3])
+                return meses_abrev.get(m.split(" / ")[0], m[:3])
+
             x_labels = [label(mes_retrasado), label(mes_passado), label(mes_atual)]
 
             pasta = criar_pasta_graficos()
             caminhos = []
 
+            # Construir títulos com os nomes fornecidos
+            titulo_cc = f"Centro de Custo"
+            descricoes_cc = []
+            if cc_ret and cc_ret != "Nenhum":
+                descricoes_cc.append(f"{label(mes_retrasado)}: {cc_val_ret:.1f}% ({cc_ret})")
+            if cc_pass and cc_pass != "Nenhum":
+                descricoes_cc.append(f"{label(mes_passado)}: {cc_val_pass:.1f}% ({cc_pass})")
+            descricoes_cc.append(f"{label(mes_atual)}: {cc_atual_perc:.1f}% ({cc_atual_nome})")
+            
+            titulo_prod = f"Produto"
+            descricoes_prod = []
+            if prod_ret and prod_ret != "Nenhum":
+                descricoes_prod.append(f"{label(mes_retrasado)}: {prod_val_ret:.1f}% ({prod_ret})")
+            if prod_pass and prod_pass != "Nenhum":
+                descricoes_prod.append(f"{label(mes_passado)}: {prod_val_pass:.1f}% ({prod_pass})")
+            descricoes_prod.append(f"{label(mes_atual)}: {prod_atual_perc:.1f}% ({prod_atual_nome})")
+            
+            titulo_tipo = f"Tipo de Atividade"
+            descricoes_tipo = []
+            if tipo_ret and tipo_ret != "Nenhum":
+                descricoes_tipo.append(f"{label(mes_retrasado)}: {tipo_val_ret:.1f}% ({tipo_ret})")
+            if tipo_pass and tipo_pass != "Nenhum":
+                descricoes_tipo.append(f"{label(mes_passado)}: {tipo_val_pass:.1f}% ({tipo_pass})")
+            descricoes_tipo.append(f"{label(mes_atual)}: {tipo_atual_perc:.1f}% ({tipo_atual_nome})")
+
             graficos = [
-                ("Total de Tarefas",               [tot_ret,          tot_pass,          total_atual],                 "qtd"),
-                (f"Centro de Custo → {cc_atual_nome}",   [cc_val_ret,   cc_val_pass,   cc_atual_perc],   "%"),
-                (f"Produto → {prod_atual_nome}",         [prod_val_ret, prod_val_pass, prod_atual_perc], "%"),
-                ("Atividades Planejadas",                [plan_ret,     plan_pass,     plan_qtd],               "qtd"),
-                (f"Tipo → {tipo_atual_nome}",            [tipo_val_ret, tipo_val_pass, tipo_atual_perc], "%"),
+                ("Total de Tarefas", [tot_ret, tot_pass, total_atual], "qtd", "line", None),
+                (titulo_cc, [cc_val_ret, cc_val_pass, cc_atual_perc], "%", "bar", descricoes_cc),
+                (titulo_prod, [prod_val_ret, prod_val_pass, prod_atual_perc], "%", "area", descricoes_prod),
+                (titulo_tipo, [tipo_val_ret, tipo_val_pass, tipo_atual_perc], "%", "line_dashed", descricoes_tipo),
+                ("Atividades Planejadas", [plan_perc_ret, plan_perc_pass, plan_perc_atual], "%", "bar_horizontal", None),
             ]
 
-            for titulo, valores, unidade in graficos:
+            for titulo, valores, unidade, tipo_grafico, descricoes in graficos:
                 if all(v == 0 for v in valores):
                     continue
 
-                fig, ax = plt.subplots(figsize=(9, 6))
-                ax.plot(range(3), valores, marker='o', linewidth=4, markersize=14, color='#101C35')
-                ax.set_xticks(range(3))
-                ax.set_xticklabels(x_labels, fontsize=16, fontweight='bold')
-                ax.set_title(titulo, fontsize=18, fontweight='bold', pad=30, color='#101C35')
-                ax.set_ylabel("Quantidade" if unidade == "qtd" else "Percentual (%)", fontsize=12)
-                ax.grid(True, alpha=0.3, linestyle='--')
-                ax.spines['top'].set_visible(False)
-                ax.spines['right'].set_visible(False)
+                fig, ax = plt.subplots(figsize=(10, 7))
+                
+                # Diferentes tipos de gráficos
+                if tipo_grafico == "line":
+                    # Gráfico de linha padrão
+                    ax.plot(range(3), valores, marker='o', linewidth=4, markersize=14, color='#101C35')
+                    # Ajustar posição dos valores para não sobrepor o título
+                    max_val = max(valores) if max(valores) > 0 else 1
+                    for i, v in enumerate(valores):
+                        label_valor = str(int(v)) if unidade == "qtd" else f"{v}%"
+                        ax.text(i, v + max_val*0.05, label_valor, ha='center', va='bottom', fontsize=12, fontweight='bold')
+                
+                elif tipo_grafico == "bar":
+                    # Gráfico de barras verticais
+                    bars = ax.bar(range(3), valores, color='#101C35', width=0.5)
+                    for i, (bar, v) in enumerate(zip(bars, valores)):
+                        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(valores)*0.02, 
+                                f"{v}%", ha='center', va='bottom', fontsize=14, fontweight='bold')
+                
+                elif tipo_grafico == "area":
+                    # Gráfico de área
+                    ax.fill_between(range(3), valores, alpha=0.3, color='#101C35')
+                    ax.plot(range(3), valores, marker='o', linewidth=3, markersize=12, color='#101C35')
+                    for i, v in enumerate(valores):
+                        ax.text(i, v + max(valores)*0.03, f"{v}%", ha='center', va='bottom', fontsize=14, fontweight='bold')
+                
+                elif tipo_grafico == "bar_horizontal":
+                    # Gráfico de barras horizontais
+                    bars = ax.barh(range(3), valores, color='#101C35', height=0.4)
+                    ax.set_yticks(range(3))
+                    ax.set_yticklabels(x_labels, fontsize=16, fontweight='bold')
+                    for i, (bar, v) in enumerate(zip(bars, valores)):
+                        ax.text(bar.get_width() + max(valores)*0.02, bar.get_y() + bar.get_height()/2,
+                                f"{v}%", ha='left', va='center', fontsize=14, fontweight='bold')
+                    ax.set_xlabel("Percentual (%)", fontsize=12)
+                    ax.set_title(titulo, fontsize=18, fontweight='bold', pad=30)
+                    ax.grid(True, alpha=0.3, linestyle='--', axis='x')
+                    ax.spines['top'].set_visible(False)
+                    ax.spines['right'].set_visible(False)
+                    ax.spines['left'].set_visible(False)
+                    plt.tight_layout()
+                    nome_seguro = "".join(c for c in titulo if c.isalnum() or c in " _->")
+                    caminho = os.path.join(
+                        pasta,
+                        f"Evolucao_{nome_seguro[:50]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                    )
+                    plt.savefig(caminho, dpi=300, bbox_inches='tight', facecolor='white')
+                    plt.close()
+                    caminhos.append((titulo, caminho))
+                    continue  # Pula o resto do código pois já foi formatado
+                
+                elif tipo_grafico == "line_dashed":
+                    # Gráfico de linha tracejada
+                    ax.plot(range(3), valores, marker='s', linewidth=3, markersize=12, 
+                            color='#101C35', linestyle='--')
+                    for i, v in enumerate(valores):
+                        ax.text(i, v + max(valores)*0.03, f"{v}%", ha='center', va='bottom', fontsize=14, fontweight='bold')
+                
+                # Configurações comuns (exceto para bar_horizontal que já foi processado)
+                if tipo_grafico != "bar_horizontal":
+                    ax.set_xticks(range(3))
+                    ax.set_xticklabels(x_labels, fontsize=16, fontweight='bold')
+                    ax.set_title(titulo, fontsize=18, fontweight='bold', pad=30)
+                    ax.set_ylabel("Quantidade" if unidade == "qtd" else "Percentual (%)", fontsize=12)
+                    ax.grid(True, alpha=0.3, linestyle='--')
+                    ax.spines['top'].set_visible(False)
+                    ax.spines['right'].set_visible(False)
+                    
+                    # Adicionar legenda com as descrições
+                    if descricoes:
+                        legenda_texto = "\n".join(descricoes)
+                        ax.text(0.02, 0.98, legenda_texto, transform=ax.transAxes,
+                                fontsize=9, verticalalignment='top',
+                                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
+                    
+                    # Ajustar ylim para gráficos de linha para evitar sobreposição
+                    if tipo_grafico == "line":
+                        max_val = max(valores) if max(valores) > 0 else 1
+                        ax.set_ylim(0, max_val * 1.2)
 
-                for i, v in enumerate(valores):
-                    ax.text(i, v + max(valores)*0.03, str(v), ha='center', va='bottom',
-                            fontsize=14, fontweight='bold', color='#101C35')
-
-                plt.tight_layout()
-                nome_seguro = "".join(c for c in titulo if c.isalnum() or c in " _->").rstrip()
-                caminho = os.path.join(pasta, f"Evolucao_{nome_seguro[:50]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-                plt.savefig(caminho, dpi=300, bbox_inches='tight', facecolor='white')
-                plt.close()
-                caminhos.append((titulo, caminho))
+                    plt.tight_layout()
+                    nome_seguro = "".join(c for c in titulo if c.isalnum() or c in " _->")
+                    caminho = os.path.join(
+                        pasta,
+                        f"Evolucao_{nome_seguro[:50]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                    )
+                    plt.savefig(caminho, dpi=300, bbox_inches='tight', facecolor='white')
+                    plt.close()
+                    caminhos.append((titulo, caminho))
 
             if caminhos:
-                st.success(f"{len(caminhos)} gráficos gerados com sucesso!")
+                st.success(f"✅ {len(caminhos)} gráficos de evolução gerados com sucesso!")
                 cols = st.columns(2)
                 for i, (tit, cam) in enumerate(caminhos):
                     with cols[i % 2]:
                         st.image(cam, caption=tit, use_container_width=True)
             else:
-                st.warning("Preencha ao menos um valor para gerar gráficos.")
+                st.warning("⚠️ Preencha ao menos um valor para gerar gráficos.")
         # =====================================================================
         
     except Exception as e:
@@ -668,11 +807,12 @@ else:
 
 with st.expander("ℹ️ Como usar"):
     st.markdown('''
-    1. Faça upload do CSV exportado do ClickUp
-    2. Os gráficos serão gerados automaticamente e salvos na pasta 'graficos/'
-    3. Use a barra lateral para aplicar filtros (incluindo Centro de Custo, Planejamento, Produto e Tipo)
-    4. Veja as contagens e detalhes abaixo
-    5. Exporte as tarefas filtradas em CSV
+    1. Faça upload do CSV exportado do ClickUp (os gráficos principais serão gerados automaticamente)
+    2. Use a barra lateral para aplicar filtros (incluindo Centro de Custo, Planejamento, Produto e Tipo)
+    3. Veja os gráficos principais gerados automaticamente
+    4. Preencha o formulário de "Evolução Mensal" com dados dos meses anteriores e clique em "Gerar 5 Gráficos de Evolução"
+    5. Veja as contagens e detalhes abaixo
+    6. Exporte as tarefas filtradas em CSV
     ''')
 
 st.markdown("---")
