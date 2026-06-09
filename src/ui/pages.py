@@ -9,10 +9,10 @@ import streamlit as st
 
 from .. import config
 from ..charts.base import fig_para_png
-from ..charts.builders import graficos_principais
+from ..charts.builders import grafico_barras_horizontal, graficos_principais
 from ..charts.evolution import graficos_evolucao
 from ..data.repository import MonthlyMetrics
-from ..domain.indicators import Indicadores
+from ..domain.indicators import Indicadores, metricas_por_colaborador
 from ..domain.period import nome_mes
 from . import cards
 
@@ -57,30 +57,22 @@ def secao_contagens(df: pd.DataFrame) -> None:
         contagem(config.COL_TIPO, "Atividades por Tipo")
 
 
-def secao_tabela_export(df: pd.DataFrame) -> None:
+def secao_colaboradores(df: pd.DataFrame) -> None:
     st.markdown("---")
-    with st.expander("⚙️ Configurar colunas visíveis"):
-        default_cols = [
-            config.COL_TASK_NAME, config.COL_STATUS, config.COL_ASSIGNEE,
-            config.COL_PRIORITY, "Due Date", config.COL_CENTRO_CUSTO,
-            config.COL_PLANEJAMENTO, config.COL_PRODUTO, config.COL_TIPO,
-        ]
-        disponiveis = df.columns.tolist()
-        selecionadas = st.multiselect(
-            "Selecione as colunas para exibir",
-            disponiveis,
-            default=[c for c in default_cols if c in disponiveis],
-        )
-    df_display = df[selecionadas] if selecionadas else df
-    st.dataframe(df_display, use_container_width=True, height=400)
-
-    csv = df_display.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "📥 Exportar CSV",
-        data=csv,
-        file_name=f"tarefas_filtradas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-        mime="text/csv",
+    st.markdown("## 👥 Colaboradores")
+    st.caption(
+        "Métricas por responsável para apoiar feedbacks e 1:1: volume de entregas, "
+        "disciplina de planejamento, carga de alta prioridade e itens em produção."
     )
+    metricas = metricas_por_colaborador(df)
+    if metricas.empty:
+        st.info("Sem coluna de responsável para gerar métricas por colaborador.")
+        return
+    st.dataframe(metricas, use_container_width=True, hide_index=True)
+
+    fig = grafico_barras_horizontal(df, config.COL_ASSIGNEE, "Tarefas por Colaborador")
+    if fig:
+        _render_grafico("Tarefas por Colaborador", fig, key="dl_colab_0")
 
 
 def _nome_arquivo(titulo: str) -> str:
@@ -103,32 +95,32 @@ def _render_grafico(titulo, fig, key: str) -> None:
 
 def secao_graficos_principais(df: pd.DataFrame) -> None:
     st.markdown("---")
-    st.markdown("## 📊 Gráficos Principais")
-    graficos = graficos_principais(df)
-    if not graficos:
-        st.info("Sem colunas suficientes para gerar gráficos.")
-        return
-    cols = st.columns(2)
-    for idx, (titulo, fig) in enumerate(graficos):
-        with cols[idx % 2]:
-            _render_grafico(titulo, fig, key=f"dl_principal_{idx}")
+    with st.expander("📊 Gráficos Principais", expanded=False):
+        graficos = graficos_principais(df)
+        if not graficos:
+            st.info("Sem colunas suficientes para gerar gráficos.")
+            return
+        cols = st.columns(2)
+        for idx, (titulo, fig) in enumerate(graficos):
+            with cols[idx % 2]:
+                _render_grafico(titulo, fig, key=f"dl_principal_{idx}")
 
 
 def secao_evolucao(metrics: list[MonthlyMetrics]) -> None:
     st.markdown("---")
-    st.subheader("📈 Evolução Mensal")
-    if len(metrics) < 2:
-        st.info(
-            "A evolução é montada automaticamente a partir dos meses já importados. "
-            "Importe ao menos 2 competências diferentes para ver os gráficos comparativos."
+    with st.expander("📈 Evolução Mensal", expanded=False):
+        if len(metrics) < 2:
+            st.info(
+                "A evolução é montada automaticamente a partir dos meses já importados. "
+                "Importe ao menos 2 competências diferentes para ver os gráficos comparativos."
+            )
+            return
+        st.caption(
+            "Meses anteriores carregados automaticamente do histórico (SQLite) — "
+            "sem digitação manual."
         )
-        return
-    st.caption(
-        "Meses anteriores carregados automaticamente do histórico (SQLite) — "
-        "sem digitação manual."
-    )
-    graficos = graficos_evolucao(metrics)
-    cols = st.columns(2)
-    for idx, (titulo, fig) in enumerate(graficos):
-        with cols[idx % 2]:
-            _render_grafico(titulo, fig, key=f"dl_evolucao_{idx}")
+        graficos = graficos_evolucao(metrics)
+        cols = st.columns(2)
+        for idx, (titulo, fig) in enumerate(graficos):
+            with cols[idx % 2]:
+                _render_grafico(titulo, fig, key=f"dl_evolucao_{idx}")

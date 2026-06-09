@@ -50,6 +50,62 @@ def _top_categoria(df: pd.DataFrame, coluna: str) -> TopCategoria:
     return TopCategoria(nome, float(perc))
 
 
+def metricas_por_colaborador(df: pd.DataFrame) -> pd.DataFrame:
+    """Métricas por Assignee p/ feedback: volume, % planejado, alta prioridade, produção.
+
+    Retorna DataFrame ordenado por Total desc. Vazio se não houver coluna de Assignee.
+    """
+    if config.COL_ASSIGNEE not in df.columns:
+        return pd.DataFrame()
+
+    linhas = []
+    for colaborador, grupo in df.dropna(subset=[config.COL_ASSIGNEE]).groupby(
+        config.COL_ASSIGNEE
+    ):
+        total = len(grupo)
+
+        planejado_perc = 0.0
+        if config.COL_PLANEJAMENTO in grupo.columns:
+            normalizado = grupo[config.COL_PLANEJAMENTO].apply(normalizar_planejamento)
+            contagem = normalizado.value_counts()
+            plan = int(contagem.get(PLANEJADO, 0))
+            nao_plan = int(contagem.get(NAO_PLANEJADO, 0))
+            denom = plan + nao_plan
+            planejado_perc = (plan / denom * 100) if denom > 0 else 0.0
+
+        alta = 0
+        if config.COL_PRIORITY in grupo.columns:
+            alta = int(
+                grupo[config.COL_PRIORITY]
+                .str.contains("urgent|high", case=False, na=False)
+                .sum()
+            )
+
+        producao = 0
+        if config.COL_STATUS in grupo.columns:
+            producao = int(
+                grupo[config.COL_STATUS]
+                .str.contains("Produção", case=False, na=False)
+                .sum()
+            )
+
+        linhas.append(
+            {
+                "Colaborador": str(colaborador),
+                "Total": total,
+                "Planejado (%)": round(planejado_perc, 1),
+                "Alta Prioridade": alta,
+                "Produção": producao,
+            }
+        )
+
+    return (
+        pd.DataFrame(linhas)
+        .sort_values("Total", ascending=False)
+        .reset_index(drop=True)
+    )
+
+
 def calcular_indicadores(df: pd.DataFrame) -> Indicadores:
     """Calcula os KPIs principais a partir de um DataFrame de tarefas."""
     planejadas_qtd = 0

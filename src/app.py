@@ -110,7 +110,7 @@ def _render_dados(conn, df, period) -> None:
     pages.secao_indicadores(indicadores, period)
     pages.secao_resumo(df_filtrado)
     pages.secao_contagens(df_filtrado)
-    pages.secao_tabela_export(df_filtrado)
+    pages.secao_colaboradores(df_filtrado)
     pages.secao_graficos_principais(df_filtrado)
 
     metrics = repository.obter_metrics_ultimos_meses(conn, n=3)
