@@ -32,6 +32,7 @@ class Indicadores:
     planejadas_qtd: int
     nao_planejadas_qtd: int
     planejadas_perc: float
+    media_por_dev: float
     centro_custo: TopCategoria
     produto: TopCategoria
     tipo: TopCategoria
@@ -62,11 +63,17 @@ def calcular_indicadores(df: pd.DataFrame) -> Indicadores:
         denom = planejadas_qtd + nao_planejadas_qtd
         planejadas_perc = (planejadas_qtd / denom * 100) if denom > 0 else 0.0
 
+    media_por_dev = 0.0
+    if config.COL_ASSIGNEE in df.columns:
+        devs_qtd = df[config.COL_ASSIGNEE].dropna().nunique()
+        media_por_dev = (len(df) / devs_qtd) if devs_qtd > 0 else 0.0
+
     return Indicadores(
         total=len(df),
         planejadas_qtd=planejadas_qtd,
         nao_planejadas_qtd=nao_planejadas_qtd,
         planejadas_perc=planejadas_perc,
+        media_por_dev=media_por_dev,
         centro_custo=_top_categoria(df, config.COL_CENTRO_CUSTO),
         produto=_top_categoria(df, config.COL_PRODUTO),
         tipo=_top_categoria(df, config.COL_TIPO),

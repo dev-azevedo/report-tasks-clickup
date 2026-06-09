@@ -34,12 +34,15 @@ def render_cards(indicadores: Indicadores, periodo_label: str) -> None:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    _, col4, col5, _ = st.columns([0.5, 1, 1, 0.5])
+    col4, col5, col6 = st.columns(3)
     planejadas = f"Planejadas: {indicadores.planejadas_qtd} ({indicadores.planejadas_perc:.2f}%)"
     with col4:
         st.markdown(_card("Atividades Planejadas", planejadas), unsafe_allow_html=True)
     with col5:
         st.markdown(_card("Atividades por Tipo", _fmt(indicadores.tipo)), unsafe_allow_html=True)
+    with col6:
+        media = f"Média: {indicadores.media_por_dev:.2f}"
+        st.markdown(_card("Atividades por Desenvolvedor", media), unsafe_allow_html=True)
 
     st.markdown(
         f"""<p style="text-align: left; color: #888; margin-top: 20px; font-size: 16px;">
